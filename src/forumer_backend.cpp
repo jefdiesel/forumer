@@ -49,6 +49,7 @@
 #include "forumer_core/forums.h"
 #include "forumer_core/media.h"
 #include "forumer_core/mnemonic.h"
+#include "forumer_core/names.h"
 #include "forumer_core/thread.h"
 
 #include "image_prep.h"
@@ -626,9 +627,15 @@ void ForumerBackend::publishIdentityState() {
       followed.append(qs(d));
     setFollowedDomains(QString::fromUtf8(QJsonDocument(followed).toJson(QJsonDocument::Compact)));
     setMyPersona(qs(m_account->currentPersona().fingerprint()));
+    setMyPersonaKey(qs(fc::toHex(m_account->currentPersona().publicKey())));
+    if (auto name = fc::names::claimedName(s.alias))
+      checkName(*name, m_account->currentPersona().publicKey());
+    publishOwnName();
     setRestorePending(m_account->restorePending());
   } else {
     setMyPersona(QString());
+    setMyPersonaKey(QString());
+    setMyNameEntry(QString());
     setFollowedDomains(QStringLiteral("[]"));
     setRestorePending(false);
   }
@@ -2884,6 +2891,7 @@ QString ForumerBackend::publish(fc::post::Draft draft, const QString &disclosure
 }
 
 void ForumerBackend::emitPost(const fc::post::Post &post) {
+  checkName(post);
   const auto &c = post.content;
   // authorKey: the full persona key, for comparing authors (the "op" badge).
   // The display text alone can be imitated; the key can't.
@@ -2922,6 +2930,68 @@ QJsonObject ForumerBackend::backlogEntry(const fc::post::Post &p,
   return entry;
 }
 
+// ── Logos names ──────────────────────────────────────────────────────────────
+
+namespace {
+// How long a name check stands before it is asked again: a holder can add or
+// remove a persona, or hand the name on, at any time.
+constexpr qint64 kNameRecheckMs = 10 * 60 * 1000;
+} // namespace
+
+void ForumerBackend::checkName(const fc::post::Post &post) {
+  if (post.disclosure != fc::identity::Disclosure::Alias)
+    return;
+  if (auto name = fc::names::claimedName(post.alias))
+    checkName(*name, post.publicKey);
+}
+
+void ForumerBackend::checkName(const std::string &name, const fc::Bytes &publicKey) {
+  const QString key = qs(name) + QLatin1Char('|') + qs(fc::toHex(publicKey));
+  NameCheck &check = m_nameChecks[key];
+  if (check.pending || (check.checkedMs && nowMs() - check.checkedMs < kNameRecheckMs))
+    return;
+  check.pending = true;
+  QPointer<ForumerBackend> self(this);
+  // The answer is the module's JSON reply, {"success", "value", "error"}; a
+  // failed call (no names module, a timeout) gives something that isn't one.
+  modules().names.resolveAsync(qs(name), [self, key, name, publicKey](QString answer) {
+    if (!self)
+      return;
+    NameCheck &done = self->m_nameChecks[key];
+    done.pending = false;
+    done.checkedMs = nowMs();
+    const std::string reply = answer.toStdString();
+    const bool verified = fc::names::replyVouches(reply, name, publicKey);
+    done.entry = fc::names::personaEntry(reply, name);
+    self->publishOwnName();
+    if (verified == done.verified)
+      return;
+    done.verified = verified;
+    self->publishNames();
+  });
+}
+
+void ForumerBackend::publishOwnName() {
+  QString entry;
+  if (m_account) {
+    const auto &key = m_account->currentPersona().publicKey();
+    const auto name = fc::names::claimedName(m_account->state().alias);
+    const auto check = name ? m_nameChecks.constFind(qs(*name) + QLatin1Char('|') + qs(fc::toHex(key)))
+                            : m_nameChecks.constEnd();
+    if (check != m_nameChecks.constEnd() && check->entry)
+      entry = qs(fc::names::withKey(*check->entry, key));
+  }
+  setMyNameEntry(entry);
+}
+
+void ForumerBackend::publishNames() {
+  QJsonObject verified;
+  for (auto it = m_nameChecks.cbegin(); it != m_nameChecks.cend(); ++it)
+    if (it.value().verified)
+      verified.insert(it.key(), true);
+  setNamesJson(QString::fromUtf8(QJsonDocument(verified).toJson(QJsonDocument::Compact)));
+}
+
 QHash<QString, QString> ForumerBackend::ownStates() const {
   // Delivery state of the unlocked account's posts, so they come back marked
   // after a restart (ownStatesJson keeps it current across lock / unlock).
@@ -2939,8 +3009,10 @@ QString ForumerBackend::loadBacklog() {
   // placeholder for a topic a few entries further down.
   const auto states = ownStates();
   QJsonArray backlog;
-  for (const auto &p : m_posts->all())
+  for (const auto &p : m_posts->all()) {
+    checkName(p);
     backlog.append(backlogEntry(p, states));
+  }
   logEvent("backlog: " + std::to_string(backlog.size()) + " post(s)");
   return QString::fromUtf8(QJsonDocument(backlog).toJson(QJsonDocument::Compact));
 }
@@ -2959,16 +3031,20 @@ QString ForumerBackend::loadBacklogPage(QString cursor) {
   const auto page = m_posts->page(after, kPageSize);
   const auto states = ownStates();
   QJsonArray posts;
-  for (const auto &p : page.posts)
+  for (const auto &p : page.posts) {
+    checkName(p);
     posts.append(backlogEntry(p, states));
+  }
   // Private forums the unlocked account is in; the rest stay sealed.
   for (const auto &row : page.sealed) {
     const fc::forums::Forum *f = privateForum(row.forum);
     if (!f)
       continue;
     auto json = fc::forums::openStored(*f, row.envelope);
-    if (auto p = json ? fc::post::Post::fromJson(*json) : std::nullopt)
+    if (auto p = json ? fc::post::Post::fromJson(*json) : std::nullopt) {
+      checkName(*p);
       posts.append(backlogEntry(*p, states));
+    }
   }
   out.insert(QStringLiteral("posts"), posts);
   out.insert(QStringLiteral("cursor"), QString::number(page.next));

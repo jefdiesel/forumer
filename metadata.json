@@ -17,6 +17,10 @@
     {
       "name": "storage_module",
       "version": "~3.0.0"
+    },
+    {
+      "name": "names",
+      "version": "~0.8.0"
     }
   ],
   "provides": [

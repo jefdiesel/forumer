@@ -263,6 +263,19 @@ class Forumer
     // Empty while locked.
     PROP(QString myPersona="" READONLY)
 
+    // The full public key (hex) of that persona, for listing it on a Logos
+    // name. Empty while locked.
+    PROP(QString myPersonaKey="" READONLY)
+
+    // Aliases proven to be Logos names: {"<name>|<persona key hex>": true}.
+    // A post shows its alias as a verified name only when its pair is here.
+    PROP(QString namesJson="{}" READONLY)
+
+    // What the alias's forumer.persona entry should be to list myPersonaKey
+    // too (its current keys plus this one). Empty until the alias has been
+    // read as a Logos name.
+    PROP(QString myNameEntry="" READONLY)
+
     PROP(QString rotationPolicy="manual" READONLY)
     PROP(QString defaultDisclosure="persona" READONLY)
     PROP(QString alias="" READONLY)

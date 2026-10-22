@@ -220,6 +220,10 @@ Item {
                                 font.pixelSize: Ui.size.small
                                 color: Ui.text3
                             }
+                            NameTag {
+                                anchors.verticalCenter: parent.verticalCenter
+                                name: thread.topic ? thread.store.verifiedName(thread.topic.author, thread.topic.authorKey) : ""
+                            }
                             StateTag { delivery: thread.topic ? thread.topic.delivery : "" }
                         }
                     }

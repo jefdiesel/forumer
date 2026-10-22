@@ -43,6 +43,7 @@ Built for [λPrize LP-0026: Forum App](https://github.com/logos-co/lambda-prize/
 | **Personas** | Public identities derived from the master key. Nobody can tell two personas belong to the same account. |
 | **Identity rotation** | *Keep* one persona, rotate *Manually*, or *Auto*: a new persona for every post. |
 | **Disclosure per post** | Post as your persona (`fr:7Q4K-M2XD`), under an alias, or fully anonymously. |
+| **Logos names** | Use a [Logos name](https://github.com/jefdiesel/logos-names) you hold as your alias, and readers see it verified (`✓ jef · logos name`). The name can be held publicly or anonymously. See [Logos names](#logos-names). |
 | **Topics and replies** | Topics tagged with up to 3 domains. Replies nest two levels deep. |
 | **Domains** | Follow the domains you care about; the home page shows *All* and *Followed* side by side. Starter domains (`#logosdevs`, `#lambdabuilders`, `#testnet-help`, `#privacy`, `#tech`) are offered even before anyone has posted in them, and a new topic started from a domain's page is posted there. |
 | **Private forums** | Create a forum only people with its invite link can read. Everything posted there is encrypted on the network with a key that only the link carries; relays and store nodes see ciphertext on an opaque topic. Personas, aliases, anonymous posting and flood limits work as in public. See [Private forums](#private-forums). |
@@ -285,6 +286,22 @@ Anonymous posts are signed with one-time keys derived from a random 64-bit id un
 | **Anonymous** | a one-time key, never reused | `Anonymous` | "without revealing any id" |
 
 Every post is signed, so it can't be forged or altered. Only *persona* and *alias* make posts recognisable as coming from the same author.
+
+### Logos names
+
+An alias that is a bare Logos name (`jef`: 1–32 of `a-z`, `0-9`, `-`) can be verified. The name's holder lists the persona keys allowed to post as it in the name's `forumer.persona` entry:
+
+```
+names set-text jef forumer.persona "<persona public key hex> <another> …"
+```
+
+Profile → *logos name* shows the exact command for the current persona, keeping keys already listed. When a post's alias is a name, Forumer asks the `names` module for the name's record in the background and shows `✓ jef · logos name` only if the record lists the key that signed the post. The check is redone every 10 minutes, so removing a key, or handing the name on, takes effect.
+
+- **Nothing changes on the wire.** The name travels as an ordinary alias, so a Forumer without this feature shows `jef · fr:7Q4K-M2XD` and accepts the post.
+- **Public or anonymous names.** The check reads only what the name lists, never who holds it, so a name held from a private account works the same and links no wallet to the posts.
+- **Can't be imitated.** The badge is drawn apart from the author text, from the record's answer; an alias typed as `jef ✓` stays plain text. Names are lowercase ASCII only, so lookalike letters are not names.
+- **What it links.** Posts under a name are meant to be recognisable as one author. Rotating personas each need listing; with *Auto* rotation, post under a persona or anonymously instead.
+- **What the network learns.** Reading a record asks the LEZ sequencer for one account. The account address is derived from the name through Argon2id, so the request doesn't spell out the name, though a sequencer could still check guesses against it.
 
 ---
 

@@ -14,6 +14,10 @@
     # a node; Forumer attaches to it there).
     storage_module.url = "github:logos-co/logos-storage-module/v3.0.0";
     storage_module.inputs.logos-module-builder.follows = "logos-module-builder";
+    # Core module dependency - must match metadata.json "dependencies".
+    # Logos Names (LNS): checks that an alias is a name listing its persona.
+    names.url = "github:jefdiesel/logos-names?dir=basecamp-module";
+    names.inputs.logos-module-builder.follows = "logos-module-builder";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:

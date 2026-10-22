@@ -69,6 +69,7 @@ Item {
                 font.pixelSize: Ui.size.small
                 color: Ui.text3
             }
+            NameTag { anchors.verticalCenter: parent.verticalCenter; name: reply.item.name || "" }
             StateTag { delivery: reply.item.delivery || "" }
             Text {
                 textFormat: Text.PlainText

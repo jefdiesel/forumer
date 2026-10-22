@@ -49,6 +49,9 @@ Item {
     readonly property bool   devMode:            hasBackend && backend.devMode === true
     readonly property string forumsJson:         hasBackend && backend.forumsJson ? backend.forumsJson : "[]"
     readonly property string mediaJson:          hasBackend && backend.mediaJson ? backend.mediaJson : "{}"
+    readonly property string namesJson:          hasBackend && backend.namesJson ? backend.namesJson : "{}"
+    readonly property string myPersonaKey:       hasBackend && backend.myPersonaKey ? backend.myPersonaKey : ""
+    readonly property string myNameEntry:        hasBackend && backend.myNameEntry ? backend.myNameEntry : ""
     readonly property bool   mediaRehost:        hasBackend && backend.mediaRehost !== false
     readonly property bool   mediaAutoFull:      hasBackend && backend.mediaAutoFull !== false
     // Fetching older posts: see historyJson in forumer.rep.
@@ -177,6 +180,23 @@ Item {
     }
     function privateForumInvite(id, onOk, onErr) {
         store.callJson(store.backend.privateForumInvite(id), onOk, onErr);
+    }
+
+    // ── Logos names (forumer_core/names.h) ────────────────────────────────────
+    // {"<name>|<persona key hex>": true} for aliases proven to be Logos names.
+    readonly property var verifiedNames: {
+        try { return JSON.parse(store.namesJson); } catch (e) { return {}; }
+    }
+    // The Logos name a post's author is verified as, or "". The alias is the
+    // part of the display before " · " (an alias can't contain "·").
+    function verifiedName(author, authorKey) {
+        if (!author || !authorKey) return "";
+        var alias = author.split(" · ")[0];
+        return store.verifiedNames[alias + "|" + authorKey] === true ? alias : "";
+    }
+    // Whether an alias could be a Logos name (forumer_core names::claimedName).
+    function isNameAlias(alias) {
+        return /^[a-z0-9-]{1,32}$/.test(alias) && alias[0] !== "-" && alias[alias.length - 1] !== "-";
     }
 
     // ── Images (forumer_core/media.h) ─────────────────────────────────────────
@@ -652,6 +672,7 @@ Item {
         function item(r, depth, subthread) {
             return {
                 id: r.id, author: r.author, body: r.body, time: store.ago(r.tsMs), media: r.media || [],
+                name: store.verifiedName(r.author, r.authorKey),
                 depth: depth, delivery: r.delivery, subthread: subthread,
                 fresh: store.freshIds[r.id] === true,
                 // Same signing key as the topic: display text can be imitated (F5).

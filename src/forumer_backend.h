@@ -234,6 +234,14 @@ private:
   QHash<QString, QString> ownStates() const;
   void publishSyncState();
 
+  // ── Logos names ────────────────────────────────────────────────────────────
+  // Check, in the background, whether a post's alias is a Logos name that
+  // lists the post's persona key; the answer lands in namesJson.
+  void checkName(const forumer::post::Post &post);
+  void checkName(const std::string &name, const forumer::Bytes &publicKey);
+  void publishNames();
+  void publishOwnName();
+
   // ── History walk ───────────────────────────────────────────────────────────
   // Load where history is complete back to; start walking once a peer has
   // told us of older posts.
@@ -544,6 +552,15 @@ private:
   std::map<std::string, qint64> m_previewSentAt;      // "<post>:<index>" -> when we sent it
   std::map<std::string, qint64> m_previewSeenAt;      // "<post>:<index>" -> when a piece was last seen
   std::map<std::string, qint64> m_previewAskedAt;     // cid -> when we asked for its preview
+
+  // Name checks, "<name>|<key hex>" -> result (memory only).
+  struct NameCheck {
+    bool pending = false;
+    bool verified = false;
+    qint64 checkedMs = 0;
+    std::optional<std::string> entry;  // its forumer.persona value, if it is a name
+  };
+  QHash<QString, NameCheck> m_nameChecks;
 
   // Opened images as data: URLs, "<sha256>|<forum>" -> URL (memory only).
   QHash<QString, QString> m_mediaCache;

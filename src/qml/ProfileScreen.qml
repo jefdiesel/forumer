@@ -113,6 +113,63 @@ Page {
     }
 
     Section {
+        id: nameSection
+        title: "logos name"
+        caption: "use a Logos name you hold as your alias, and readers see it verified"
+
+        readonly property bool isName: profile.store.isNameAlias(profile.store.alias)
+        readonly property bool verified: isName
+            && profile.store.verifiedNames[profile.store.alias + "|" + profile.store.myPersonaKey] === true
+        // Keeps the keys already listed, so earlier personas stay verified.
+        readonly property string command: "names set-text " + profile.store.alias
+            + " forumer.persona \"" + (profile.store.myNameEntry || profile.store.myPersonaKey) + "\""
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: 20
+            spacing: 12
+            NameTag { name: nameSection.verified ? profile.store.alias : "" }
+            Text {
+                textFormat: Text.PlainText
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                font.family: Ui.mono
+                font.pixelSize: Ui.size.caption
+                color: Ui.text3
+                text: !nameSection.isName
+                      ? "set your alias to a name you hold (lowercase, like jef) to link it"
+                      : nameSection.verified
+                        ? "posts under this alias show as your verified name. The name can be held publicly or anonymously; only this persona's key is listed on it."
+                        : "list this persona on " + profile.store.alias + ", from the Names app or the names command line:"
+            }
+            RowLayout {
+                visible: nameSection.isName && !nameSection.verified && profile.store.myPersonaKey.length > 0
+                Layout.fillWidth: true
+                spacing: 12
+                Text {
+                    textFormat: Text.PlainText
+                    Layout.fillWidth: true
+                    text: nameSection.command
+                    wrapMode: Text.WrapAnywhere
+                    font.family: Ui.mono
+                    font.pixelSize: Ui.size.caption
+                    color: Ui.text2
+                }
+                FButton {
+                    text: "copy"
+                    onClicked: {
+                        nameClipboard.text = nameSection.command;
+                        nameClipboard.selectAll();
+                        nameClipboard.copy();
+                        nameClipboard.text = "";
+                    }
+                }
+            }
+            TextEdit { id: nameClipboard; visible: false; textFormat: TextEdit.PlainText }
+        }
+    }
+
+    Section {
         title: "post as, by default"
         caption: "you can still change it on each post"
 
