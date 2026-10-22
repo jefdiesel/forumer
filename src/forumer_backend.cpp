@@ -2936,6 +2936,11 @@ namespace {
 // How long a name check stands before it is asked again: a holder can add or
 // remove a persona, or hand the name on, at any time.
 constexpr qint64 kNameRecheckMs = 10 * 60 * 1000;
+// A check with no answer by then counts as failed (and is asked again later).
+constexpr int kNameCheckTimeoutMs = 60 * 1000;
+// Checks asked of the names module at once: each costs it an Argon2id
+// derivation and a sequencer read, and the module is shared with other apps.
+constexpr int kNameChecksInFlight = 3;
 } // namespace
 
 void ForumerBackend::checkName(const fc::post::Post &post) {
@@ -2951,24 +2956,49 @@ void ForumerBackend::checkName(const std::string &name, const fc::Bytes &publicK
   if (check.pending || (check.checkedMs && nowMs() - check.checkedMs < kNameRecheckMs))
     return;
   check.pending = true;
-  QPointer<ForumerBackend> self(this);
-  // The answer is the module's JSON reply, {"success", "value", "error"}; a
-  // failed call (no names module, a timeout) gives something that isn't one.
-  modules().names.resolveAsync(qs(name), [self, key, name, publicKey](QString answer) {
-    if (!self)
-      return;
-    NameCheck &done = self->m_nameChecks[key];
-    done.pending = false;
-    done.checkedMs = nowMs();
-    const std::string reply = answer.toStdString();
-    const bool verified = fc::names::replyVouches(reply, name, publicKey);
-    done.entry = fc::names::personaEntry(reply, name);
-    self->publishOwnName();
-    if (verified == done.verified)
-      return;
-    done.verified = verified;
-    self->publishNames();
-  });
+  m_nameQueue.push_back({name, publicKey});
+  pumpNameChecks();
+}
+
+void ForumerBackend::pumpNameChecks() {
+  while (m_nameChecksInFlight < kNameChecksInFlight && !m_nameQueue.empty()) {
+    const std::string name = m_nameQueue.front().first;
+    const fc::Bytes publicKey = m_nameQueue.front().second;
+    m_nameQueue.pop_front();
+    const QString key = qs(name) + QLatin1Char('|') + qs(fc::toHex(publicKey));
+    const qint64 started = nowMs();
+    m_nameChecks[key].startedMs = started;
+    ++m_nameChecksInFlight;
+    QPointer<ForumerBackend> self(this);
+    // The answer is the module's JSON reply, {"success", "value", "error"}; a
+    // failed call (no names module, a timeout) gives something that isn't one.
+    modules().names.resolveAsync(qs(name), [self, key, name, publicKey, started](QString answer) {
+      if (self)
+        self->finishNameCheck(key, name, publicKey, started, answer.toStdString());
+    });
+    QTimer::singleShot(kNameCheckTimeoutMs, this, [this, key, name, publicKey, started]() {
+      finishNameCheck(key, name, publicKey, started, std::string());
+    });
+  }
+}
+
+void ForumerBackend::finishNameCheck(const QString &key, const std::string &name,
+                                     const fc::Bytes &publicKey, qint64 started,
+                                     const std::string &reply) {
+  NameCheck &done = m_nameChecks[key];
+  if (!done.pending || done.startedMs != started)
+    return;  // already answered, or timed out
+  done.pending = false;
+  done.checkedMs = nowMs();
+  --m_nameChecksInFlight;
+  QTimer::singleShot(0, this, [this]() { pumpNameChecks(); });
+  const bool verified = fc::names::replyVouches(reply, name, publicKey);
+  done.entry = fc::names::personaEntry(reply, name);
+  publishOwnName();
+  if (verified == done.verified)
+    return;
+  done.verified = verified;
+  publishNames();
 }
 
 void ForumerBackend::publishOwnName() {

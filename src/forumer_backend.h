@@ -239,6 +239,9 @@ private:
   // lists the post's persona key; the answer lands in namesJson.
   void checkName(const forumer::post::Post &post);
   void checkName(const std::string &name, const forumer::Bytes &publicKey);
+  void pumpNameChecks();
+  void finishNameCheck(const QString &key, const std::string &name, const forumer::Bytes &publicKey,
+                       qint64 started, const std::string &reply);
   void publishNames();
   void publishOwnName();
 
@@ -558,9 +561,12 @@ private:
     bool pending = false;
     bool verified = false;
     qint64 checkedMs = 0;
+    qint64 startedMs = 0;              // when the module was asked (0 = queued)
     std::optional<std::string> entry;  // its forumer.persona value, if it is a name
   };
   QHash<QString, NameCheck> m_nameChecks;
+  std::deque<std::pair<std::string, forumer::Bytes>> m_nameQueue;
+  int m_nameChecksInFlight = 0;
 
   // Opened images as data: URLs, "<sha256>|<forum>" -> URL (memory only).
   QHash<QString, QString> m_mediaCache;
